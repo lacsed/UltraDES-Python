@@ -13,7 +13,7 @@ Requirements:
 
 Install using pip
 
-### import UltraDES
+### Import UltraDES
 
 ```py
 from ultrades.automata import *
