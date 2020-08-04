@@ -91,6 +91,50 @@ def local_modular_supervisors(plants, specifications):
 
     return list(DeterministicFiniteAutomaton.LocalModularSupervisor(plants_lst, specs_lst))
 
+def local_modular_reduced_supervisors(plants, specifications):
+    plants_lst = List[DeterministicFiniteAutomaton]()
+    for p in plants:
+        plants_lst.Add(p)
+
+    specs_lst = List[DeterministicFiniteAutomaton]()
+    for e in specifications:
+        specs_lst.Add(e)
+     
+    return list(DeterministicFiniteAutomaton.LocalModularReducedSupervisor(plants_lst, specs_lst))   
+    
+def local_modular_localized_supervisors(plants, specifications):
+    plants_lst = List[DeterministicFiniteAutomaton]()
+    for p in plants:
+        plants_lst.Add(p)
+
+    specs_lst = List[DeterministicFiniteAutomaton]()
+    for e in specifications:
+        specs_lst.Add(e)
+     
+    return list(DeterministicFiniteAutomaton.LocalModularLocalizedSupervisor(plants_lst, specs_lst))     
+
+def localized_supervisors(plants, specifications):
+    plants_lst = List[DeterministicFiniteAutomaton]()
+    for p in plants:
+        plants_lst.Add(p)
+
+    specs_lst = List[DeterministicFiniteAutomaton]()
+    for e in specifications:
+        specs_lst.Add(e)
+     
+    return list(DeterministicFiniteAutomaton.MonolithicLocalizedSupervisor(plants_lst, specs_lst))
+
+def monolithic_reduced_supervisor(plants, specifications):
+    plants_lst = List[DeterministicFiniteAutomaton]()
+    for p in plants:
+        plants_lst.Add(p)
+
+    specs_lst = List[DeterministicFiniteAutomaton]()
+    for e in specifications:
+        specs_lst.Add(e)
+
+    return DeterministicFiniteAutomaton.MonolithicReducedSupervisor(plants_lst, specs_lst)    
+
 # IO Operations
 
 def read_ads(path):
@@ -131,7 +175,6 @@ def read_bin(path):
 
 def write_bin(G, path):
     G.SerializeAutomaton(path)
-
 
 def show_automaton(G):
     html_code = ("element.innerHTML += (Viz(`{}`))").format(G.ToDotCode.replace("rankdir=TB", "rankdir=LR"))
