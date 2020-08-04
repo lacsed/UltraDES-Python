@@ -4,6 +4,8 @@ import os
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+print((os.path.join("lib", "site-packages", ""), os.path.join("ultrades", "UltraDES.dll")))
+
 setuptools.setup(
     name="ultrades-python",
     version="0.0.2",
@@ -24,7 +26,6 @@ setuptools.setup(
         'pythonnet>=2.5.0',
         'ipython'
     ],
-    data_files=[(os.path.join("lib", "site-packages", ""), os.path.join("ultrades", "UltraDES.dll"))],
-    package_data={'ultrades' : ['UltraDES.dll']},
+    data_files=[(os.path.join("lib", "site-packages"), [os.path.join("ultrades", "UltraDES.dll")])],
     python_requires='>=3.6',
 )
