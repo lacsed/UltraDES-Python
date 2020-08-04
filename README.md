@@ -13,20 +13,34 @@ Requirements:
 
 Install using pip
 
-### Import UltraDES
+### On Windows
+
+- Install python 3.7 (we recommend anaconda distribution)
+- Run 'pip install git+https://github.com/lacsed/UltraDES-Python.git'
+
+### On Ubuntu
+
+- Install python 3.7 and pip
+- Run 'sudo apt-get install clang'
+- Run 'sudo apt-get install libglib2.0-dev'
+- Run 'sudo apt-get install python3-dev'
+- Run 'pip install git+https://github.com/lacsed/UltraDES-Python.git'
+
+
+### import UltraDES
 
 ```py
 from ultrades.automata import *
 ```
 
-### Creating States
+### Create States
 
 ```py
 s1 = state("s1", marked = True)
 s2 = state("s2", marked = False)
 ```
 
-### Creating Events
+### Create Events
 
 ```py
 e1 = event("e1", controllable = True)
@@ -35,9 +49,9 @@ e3 = event("e3", controllable = True)
 e4 = event("e4", controllable = False)
 ```
 
-### Creating an Automaton
+### Create Automata
 
-```cs
+```py
 G1 = dfa(
 [
     (s1, e1, s2), 
@@ -48,20 +62,21 @@ G2 = dfa(
 [
     (s1, e3, s2), 
     (s2, e4, s1)
-], s1, "G2");
+], s1, "G2")
 ```
 
 ## Operations with Automata
 
 ### Making a Parallel composition
 
-```cs
-
+```py
 Gp = parallel_composition(G1, G2); 
-
 ```
-### Showing the Automaton
 
-```cs
+
+
+### Showing the Automaton (Jupyter notebook)
+
+```py
  show_automaton(Gp)
  ```
