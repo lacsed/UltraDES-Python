@@ -83,4 +83,4 @@ Gp = parallel_composition(G1, G2);
  
  ## More Functions 
  
- See the [Wiki]{https://github.com/lacsed/UltraDES-Python/wiki} for more implemented functions.
+ See the [Wiki](https://github.com/lacsed/UltraDES-Python/wiki) for more implemented functions.
