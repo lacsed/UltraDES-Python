@@ -16,7 +16,7 @@ Install using pip
 ### On Windows
 
 - Install python 3.7 (we recommend anaconda distribution)
-- Run 'pip install --upgrade --force-reinstall https://github.com/lacsed/UltraDES-Python/releases/download/0.0.2/ultrades_python-0.0.2-py3-none-any.whl'
+- Run 'pip install https://github.com/lacsed/UltraDES-Python/releases/download/0.0.2/ultrades_python-0.0.2-py3-none-any.whl'
 
 ### On Ubuntu
 
@@ -24,7 +24,7 @@ Install using pip
 - Run 'sudo apt-get install clang'
 - Run 'sudo apt-get install libglib2.0-dev'
 - Run 'sudo apt-get install python3-dev'
-- Run 'pip install --upgrade --force-reinstall https://github.com/lacsed/UltraDES-Python/releases/download/0.0.2/ultrades_python-0.0.2-py3-none-any.whl'
+- Run 'pip install https://github.com/lacsed/UltraDES-Python/releases/download/0.0.2/ultrades_python-0.0.2-py3-none-any.whl'
 
 
 ### import UltraDES
