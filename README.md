@@ -76,7 +76,7 @@ Gp = parallel_composition(G1, G2);
 
 
 
-### Showing the Automaton (Jupyter notebook)
+### Showing the Automaton (only on Jupyter Lab notebook)
 
 ```py
  show_automaton(Gp)
