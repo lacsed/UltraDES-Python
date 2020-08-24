@@ -20,6 +20,7 @@ Install using pip
 
 ### On Ubuntu
 
+- Install mono
 - Install python 3.7 and pip
 - Run 'sudo apt-get install clang'
 - Run 'sudo apt-get install libglib2.0-dev'
