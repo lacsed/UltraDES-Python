@@ -20,11 +20,9 @@ Install using pip
 
 ### On Ubuntu
 
-- Install mono
-- Install python 3.7 and pip
-- Run 'sudo apt-get install clang'
-- Run 'sudo apt-get install libglib2.0-dev'
-- Run 'sudo apt-get install python3-dev'
+- Install [mono](https://www.mono-project.com/download/stable/#download-lin)
+- Install python 3.7 or 3.8 and pip ([tutorial](https://phoenixnap.com/kb/how-to-install-python-3-ubuntu))
+- Run 'sudo apt-get install clang libglib2.0-dev python3-dev'
 - Run 'pip install https://github.com/lacsed/UltraDES-Python/releases/download/0.0.2/ultrades_python-0.0.2-py3-none-any.whl'
 
 
@@ -74,9 +72,7 @@ G2 = dfa(
 Gp = parallel_composition(G1, G2); 
 ```
 
-
-
-### Showing the Automaton (only on Jupyter Lab notebook)
+### Showing the Automaton (only on Jupyter Lab)
 
 ```py
  show_automaton(Gp)
