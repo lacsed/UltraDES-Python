@@ -29,6 +29,8 @@ Install using pip
 ### import UltraDES
 
 ```py
+import sys, ultrades, os
+sys.path.append(os.path.dirname(ultrades.__file__))
 from ultrades.automata import *
 ```
 
