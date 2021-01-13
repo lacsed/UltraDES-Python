@@ -3,7 +3,7 @@ clr.AddReference("UltraDES")
 clr.AddReference("System.Linq")
 clr.AddReference('System.Collections')
 
-from System.Collections.Generic import List
+from System.Collections.Generic import List, KeyValuePair
 from System import ValueTuple, UInt32
 
 from UltraDES.PetriNets import PetriNet, Marking, Node, Place, Transition, Arc
@@ -16,13 +16,12 @@ def transition(name):
     return Transition(name)
 
 def marking(pairs):
-    marking_lst = List[ValueTuple[Place, UInt32]]()
+    marking_lst = List[KeyValuePair[Place, UInt32]]()
     for m in pairs:
-        t = ValueTuple.Create(m[0], UInt32.Parse(m[1].ToString()))
+        t = KeyValuePair[Place, UInt32](m[0], UInt32.Parse(str(m[1])))
         marking_lst.Add(t)
 
     return Marking(marking_lst)    
-
 
 def petri_net(arcs, name):
     arcs_lst = List[Arc]()
