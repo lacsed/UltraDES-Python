@@ -8,7 +8,7 @@ print((os.path.join("lib", "site-packages", ""), os.path.join("ultrades", "Ultra
 
 setuptools.setup(
     name="ultrades-python",
-    version="0.0.2",
+    version="0.0.3",
     author="LACSED Developers",
     author_email="lacsed.ufmg@gmail.com",
     description="A library for analysis and control of Discrete Event Systems",

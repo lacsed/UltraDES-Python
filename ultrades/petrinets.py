@@ -6,7 +6,7 @@ clr.AddReference('System.Collections')
 from System.Collections.Generic import List
 from System import ValueTuple, UInt32
 
-from UltraDES.PetriNets import PetriNet, Marking, Node, Place, Transition
+from UltraDES.PetriNets import PetriNet, Marking, Node, Place, Transition, Arc
 from IPython.core.display import HTML, Javascript, display
 
 def place(name):
@@ -25,11 +25,10 @@ def marking(pairs):
 
 
 def petri_net(arcs, name):
-    arcs_lst = List[ValueTuple[Node, Node, UInt32]]()
+    arcs_lst = List[Arc]()
     for a in arcs:
-        t = ValueTuple.Create(a[0], a[1], UInt32.Parse(a[2].ToString()))
+        t = Arc(a[0], a[1], a[2])
         arcs_lst.Add(t)
-
     return PetriNet(arcs_lst, name)
 
 def places(P):
