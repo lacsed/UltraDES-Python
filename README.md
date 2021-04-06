@@ -84,6 +84,6 @@ Gp = parallel_composition(G1, G2);
  
  See the [Wiki](https://github.com/lacsed/UltraDES-Python/wiki) for more implemented functions.
  
- ## Test UltraDES-Python on Google Colab
+ ## Try UltraDES-Python
  
- [Example Notebook](https://colab.research.google.com/drive/1g4vS4Yppzk8nzfzyO8Kna93LkOqxXYNc?usp=sharing)
+<a href="https://colab.research.google.com/drive/1g4vS4Yppzk8nzfzyO8Kna93LkOqxXYNc?usp=sharing"><img src="https://img.shields.io/static/v1?label=Go%20to&message=Colab%20NB&color=purple&style=for-the-badge"></a>
