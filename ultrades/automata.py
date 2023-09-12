@@ -5,8 +5,21 @@ clr.AddReference('System.Collections')
 
 from System.Collections.Generic import List
 
-from UltraDES import DeterministicFiniteAutomaton, State, Event, Marking, Controllability, Transition
+from UltraDES import DeterministicFiniteAutomaton, State, AbstractState, Event, Marking, Controllability, Transition
 from IPython.core.display import HTML, Javascript, display
+from IPython.core.getipython import get_ipython
+import time
+import hashlib
+
+def load_viz_js():
+    script = """
+        var script = document.createElement('script');
+        script.src = "https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js";
+        document.head.appendChild(script);
+    """
+    display(Javascript(script))
+    
+load_viz_js()
 
 def state(name, marked = False):
     return State(name, Marking.Marked if marked else Marking.Unmarked)
@@ -31,13 +44,13 @@ def initial_state(G):
     return G.InitialState
 
 def events(G):
-    return G.Events
+    return list(G.Events)
 
 def states(G):
-    return G.States
+    return list(G.States)
 
 def marked_states(G):
-    return G.MarkedStates
+    return list(G.MarkedStates)
 
 def transitions(G):
     trans = G.Transitions
@@ -177,8 +190,32 @@ def write_bin(G, path):
     G.SerializeAutomaton(path)
 
 def show_automaton(G):
-    html_code = ("element.innerHTML += (Viz(`{}`))").format(G.ToDotCode.replace("rankdir=TB", "rankdir=LR"))
-    return Javascript(html_code, lib="https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js")
+    shell_type = get_ipython().__class__.__name__
+    
+    if shell_type == 'Shell':
+        html_code = ('''
+        <script src="/nbextensions/google.colab/viz.js"></script>
+        <script>
+        var elem = document.createElement('svg');
+        elem.innerHTML += (Viz(`{}`, `svg`));
+        document.querySelector('#output-area').appendChild(elem);
+        </script>
+        ''').format(G.ToDotCode.replace("rankdir=TB", "rankdir=LR"))
+
+        return HTML(html_code)
+    else:
+        timestamp = str(time.time())
+        hash_obj = hashlib.md5(timestamp.encode())
+        div_id = "out_" + hash_obj.hexdigest()
+
+        display(HTML(f'<div id="{div_id}"></div>'))
+
+        code = f'''
+        let targetDiv = document.querySelector("#{div_id}");
+        targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg')'''
+
+        return Javascript(code)
+
 
  
 

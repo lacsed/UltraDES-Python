@@ -8,6 +8,20 @@ from System import ValueTuple, UInt32
 
 from UltraDES.PetriNets import PetriNet, Marking, Node, Place, Transition, Arc
 from IPython.core.display import HTML, Javascript, display
+from IPython.core.getipython import get_ipython
+import time
+import hashlib
+
+def load_viz_js():
+    script = """
+        var script = document.createElement('script');
+        script.src = "https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js";
+        document.head.appendChild(script);
+    """
+    display(Javascript(script))
+
+load_viz_js()
+
 
 def place(name):
     return Place(name)
@@ -73,5 +87,28 @@ def incidence_matrix(P):
     return P.IncidenceMatrix();  
 
 def show_petri_net(P):
-    html_code = ("element.innerHTML += (Viz(`{}`))").format(P.ToDotCode.replace("rankdir=TB", "rankdir=LR"))
-    return Javascript(html_code, lib="https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js")           
+    shell_type = get_ipython().__class__.__name__
+    
+    if shell_type == 'Shell':
+        html_code = ('''
+        <script src="/nbextensions/google.colab/viz.js"></script>
+        <script>
+        var elem = document.createElement('svg');
+        elem.innerHTML += (Viz(`{}`, `svg`));
+        document.querySelector('#output-area').appendChild(elem);
+        </script>
+        ''').format(P.ToDotCode().replace("rankdir=TB", "rankdir=LR"))
+
+        return HTML(html_code)
+    else:
+        timestamp = str(time.time())
+        hash_obj = hashlib.md5(timestamp.encode())
+        div_id = "out_" + hash_obj.hexdigest()
+
+        display(HTML(f'<div id="{div_id}"></div>'))
+
+        code = f'''
+        let targetDiv = document.querySelector("#{div_id}");
+        targetDiv.innerHTML = Viz(`{P.ToDotCode().replace("rankdir=TB", "rankdir=LR")}`, 'svg')'''
+
+        return Javascript(code)
