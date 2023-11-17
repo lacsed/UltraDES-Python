@@ -66,13 +66,21 @@ def enabled_transitions(P, marking):
     return list(P.EnabledTransitions(marking))
 
 def fire_transition(P, marking, transitions):
-    return P.Fire(marking, transition)
+    return P.Fire(marking, transitions)
 
 def is_siphon(P, places):
-    return P.IsSiphon(places)
+    places_lst = List[Place]()
+    for p in places:
+        places_lst.Add(p)
+
+    return P.IsSiphon(places_lst)
 
 def is_trap(P, places):
-    return P.IsTrap(places)
+    places_lst = List[Place]()
+    for p in places:
+        places_lst.Add(p)
+
+    return P.IsTrap(places_lst)
 
 def coverability_tree(P, marking):
     return list(P.CoverabilityTree(marking))   
