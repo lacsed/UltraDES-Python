@@ -5,7 +5,7 @@ clr.AddReference('System.Collections')
 
 from System.Collections.Generic import List
 
-from UltraDES import DeterministicFiniteAutomaton, State, AbstractState, Event, Marking, Controllability, Transition
+from UltraDES import DeterministicFiniteAutomaton, State, Event, Marking, Controllability, Transition, ObserverAlgorithms
 from IPython.core.display import HTML, Javascript, display
 from IPython.core.getipython import get_ipython
 import time
@@ -56,6 +56,12 @@ def transitions(G):
     trans = G.Transitions
     return list(map(lambda t: (t.Origin, t.Trigger, t.Destination), trans))
 
+def simplify_states_name(G):
+    return G.SimplifyStatesName()
+
+def to_regular_expression(G):
+    return G.ToRegularExpression
+
 # Operations
 def parallel_composition(G1, G2):
     return DeterministicFiniteAutomaton.ParallelComposition(G1, G2)
@@ -65,6 +71,9 @@ def product(G1, G2):
 
 def projection(G, remove):
     return G.Projection(remove)
+
+def inverse_projection(G, events):
+    return G.InverseProjection(events)
 
 def accessible(G):
     return G.AccessiblePart
@@ -79,7 +88,10 @@ def minimize(G):
     return G.Minimal
 
 def prefix_closure(G):
-    return G.PrefixClosure        
+    return G.PrefixClosure     
+
+def isomorphism(G1, G2):
+    return DeterministicFiniteAutomaton.Isomorphism(G1, G2)
 
 # Supervisory Controle
 def monolithic_supervisor(plants, specifications):
@@ -102,7 +114,7 @@ def local_modular_supervisors(plants, specifications):
     for e in specifications:
         specs_lst.Add(e)
 
-    return list(DeterministicFiniteAutomaton.LocalModularSupervisor(plants_lst, specs_lst))
+    return list(DeterministicFiniteAutomaton.LocalModularSupervisor(plants_lst, specs_lst, None))
 
 def local_modular_reduced_supervisors(plants, specifications):
     plants_lst = List[DeterministicFiniteAutomaton]()
@@ -149,7 +161,6 @@ def monolithic_reduced_supervisor(plants, specifications):
     return DeterministicFiniteAutomaton.MonolithicReducedSupervisor(plants_lst, specs_lst)    
 
 # IO Operations
-
 def read_ads(path):
     return DeterministicFiniteAutomaton.FromAdsFile(path)
 
@@ -189,6 +200,9 @@ def read_bin(path):
 def write_bin(G, path):
     G.SerializeAutomaton(path)
 
+def write_fm(G, path):
+    G.ToFM(path)
+
 def show_automaton(G):
     shell_type = get_ipython().__class__.__name__
     
@@ -216,10 +230,14 @@ def show_automaton(G):
 
         return Javascript(code)
 
+# Observer Algorithms
+def observer_property_verify(G, events):
+    list_opv = ObserverAlgorithms.ObserverPropertyVerify(G, events)
+    return_on_dead = list_opv[0]
+    determinized_G = list_opv[1].Determinize
+    
+    return (return_on_dead, determinized_G)
 
- 
-
-
-
-
+def observer_property_search(G, events):
+    return ObserverAlgorithms.ObserverPropertySearch(G, events).Determinize
 
