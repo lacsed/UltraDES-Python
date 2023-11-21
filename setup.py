@@ -43,6 +43,9 @@ setuptools.setup(
     
     # Arquivos de dados a serem incluídos no pacote
     data_files=[(data_files_path, [dll_path])],
+
+    package_data={"ultrades": ["*.dll"],},
+    include_package_data=True,
     
     # Versão mínima do Python necessária
     python_requires='>=3.6',
