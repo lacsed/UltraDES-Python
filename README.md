@@ -22,14 +22,14 @@ Install using pip
 ### On Windows
 
 - Install python 3.7 (we recommend anaconda distribution)
-- Run 'pip install https://github.com/lacsed/UltraDES-Python/releases/download/0.0.3/ultrades_python-0.0.3-py3-none-any.whl'
+- Run 'pip install https://github.com/lacsed/UltraDES-Python/releases/download/0.0.5/ultrades_python-0.0.5-py3-none-any.whl'
 
 ### On Ubuntu
 
 - Install [mono](https://www.mono-project.com/download/stable/#download-lin)
 - Install python 3.7 or 3.8 and pip ([tutorial](https://phoenixnap.com/kb/how-to-install-python-3-ubuntu))
 - Run 'sudo apt-get install clang libglib2.0-dev python3-dev'
-- Run 'pip install https://github.com/lacsed/UltraDES-Python/releases/download/0.0.3/ultrades_python-0.0.3-py3-none-any.whl'
+- Run 'pip install https://github.com/lacsed/UltraDES-Python/releases/download/0.0.5/ultrades_python-0.0.5-py3-none-any.whl'
 
 
 ### import UltraDES
