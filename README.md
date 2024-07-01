@@ -93,3 +93,4 @@ Gp = parallel_composition(G1, G2);
  ## Try UltraDES-Python
  
 <a href="https://colab.research.google.com/drive/1g4vS4Yppzk8nzfzyO8Kna93LkOqxXYNc?usp=sharing"><img src="https://img.shields.io/static/v1?label=Go%20to&message=Colab%20NB&color=purple&style=for-the-badge"></a>
+<a href="https://colab.research.google.com/drive/1W3pWzNkyg1MMmAing3wZjBERyUJLpXN1?usp=sharing"><img src="https://img.shields.io/static/v1?label=Go%20to&message=Examples&color=pink&style=for-the-badge"></a>
