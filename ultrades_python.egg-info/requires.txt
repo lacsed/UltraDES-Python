@@ -1,0 +1,3 @@
+pycparser
+pythonnet>=2.5.0
+ipython

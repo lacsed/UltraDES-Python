@@ -1,0 +1,12 @@
+LICENSE
+README.md
+setup.py
+ultrades/UltraDES.dll
+ultrades/__init__.py
+ultrades/automata.py
+ultrades/petrinets.py
+ultrades_python.egg-info/PKG-INFO
+ultrades_python.egg-info/SOURCES.txt
+ultrades_python.egg-info/dependency_links.txt
+ultrades_python.egg-info/requires.txt
+ultrades_python.egg-info/top_level.txt

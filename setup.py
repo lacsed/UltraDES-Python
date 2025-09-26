@@ -12,7 +12,7 @@ dll_path = os.path.join("ultrades", "UltraDES.dll")
 setuptools.setup(
     # Informações básicas
     name="ultrades-python",
-    version="0.0.5",
+    version="0.0.6",
     author="LACSED Developers",
     author_email="lacsed.ufmg@gmail.com",
     description="A library for analysis and control of Discrete Event Systems",
