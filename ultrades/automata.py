@@ -6,6 +6,18 @@ clr.AddReference('System.Collections')
 from System.Collections.Generic import List
 
 from UltraDES import DeterministicFiniteAutomaton, State, Event, Marking, Controllability, Transition, ObserverAlgorithms
+
+def _bind_to_string(cls):
+    def _to_string(self):
+        return self.ToString()
+    cls.__str__ = _to_string
+    cls.__repr__ = _to_string
+
+
+_bind_to_string(State)
+_bind_to_string(Event)
+_bind_to_string(Transition)
+
 from IPython.core.display import HTML, Javascript, display
 from IPython.core.getipython import get_ipython
 import time
@@ -207,16 +219,20 @@ def show_automaton(G):
     shell_type = get_ipython().__class__.__name__
     
     if shell_type == 'Shell':
-        html_code = ('''
-        <script src="/nbextensions/google.colab/viz.js"></script>
-        <script>
-        var elem = document.createElement('svg');
-        elem.innerHTML += (Viz(`{}`, `svg`));
-        document.querySelector('#output-area').appendChild(elem);
-        </script>
-        ''').format(G.ToDotCode.replace("rankdir=TB", "rankdir=LR"))
+        timestamp = str(time.time())
+        hash_obj = hashlib.md5(timestamp.encode())
+        div_id = "out_" + hash_obj.hexdigest()
 
-        return HTML(html_code)
+        htmlContent = f'''
+        <script src="https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js"></script>
+        <div id="{div_id}"></div>
+        <script>
+            let targetDiv = document.querySelector("#{div_id}");
+            targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+        </script>
+        '''
+
+        return display(HTML(htmlContent))
     else:
         timestamp = str(time.time())
         hash_obj = hashlib.md5(timestamp.encode())
