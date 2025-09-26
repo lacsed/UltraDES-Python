@@ -6,6 +6,18 @@ clr.AddReference('System.Collections')
 from System.Collections.Generic import List
 
 from UltraDES import DeterministicFiniteAutomaton, State, Event, Marking, Controllability, Transition, ObserverAlgorithms
+
+def _bind_to_string(cls):
+    def _to_string(self):
+        return self.ToString()
+    cls.__str__ = _to_string
+    cls.__repr__ = _to_string
+
+
+_bind_to_string(State)
+_bind_to_string(Event)
+_bind_to_string(Transition)
+
 from IPython.core.display import HTML, Javascript, display
 from IPython.core.getipython import get_ipython
 import time
