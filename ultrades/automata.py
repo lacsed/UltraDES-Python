@@ -3,9 +3,21 @@ clr.AddReference("UltraDES")
 clr.AddReference("System.Linq")
 clr.AddReference('System.Collections')
 
-from System.Collections.Generic import List
+from System import ValueTuple
+from System.Collections.Generic import HashSet, List
 
-from UltraDES import DeterministicFiniteAutomaton, State, Event, Marking, Controllability, Transition, ObserverAlgorithms
+from UltraDES import (
+    AbstractEvent,
+    Controllability,
+    DeterministicFiniteAutomaton,
+    Event,
+    Marking,
+    ObserverAlgorithms,
+    State,
+    Transition,
+)
+from UltraDES.Diagnosability import DiagnosticsAlgoritms
+from UltraDES.Opacity import OpacityAlgorithms
 
 def _bind_to_string(cls):
     def _to_string(self):
@@ -22,6 +34,110 @@ from IPython.core.display import HTML, Javascript, display
 from IPython.core.getipython import get_ipython
 import time
 import hashlib
+
+
+# === Python/.NET interop helpers ===
+def _as_event(event_like, event_source):
+    """Return the C# ``Event`` instance for ``event_like``."""
+
+    if isinstance(event_like, AbstractEvent):
+        return event_like
+
+    if isinstance(event_like, str):
+        if not event_source:
+            raise TypeError(
+                "Event names can only be resolved when an automaton is provided."
+            )
+        for candidate in event_source:
+            name = getattr(candidate, "Name", None)
+            if name == event_like or str(candidate) == event_like:
+                return candidate
+        raise ValueError(f"Unknown event '{event_like}'")
+
+    raise TypeError(
+        "Events must be UltraDES events or event names (strings) when using the Python wrapper."
+    )
+
+
+def _as_state(state_like, state_source):
+    """Return the C# ``State`` instance for ``state_like``."""
+
+    if isinstance(state_like, State):
+        return state_like
+
+    if isinstance(state_like, str):
+        if not state_source:
+            raise TypeError(
+                "State names can only be resolved when an automaton is provided."
+            )
+        for candidate in state_source:
+            name = getattr(candidate, "Name", None)
+            if name == state_like or str(candidate) == state_like:
+                return candidate
+        raise ValueError(f"Unknown state '{state_like}'")
+
+    raise TypeError(
+        "States must be UltraDES states or state names (strings) when using the Python wrapper."
+    )
+
+
+def _normalize_source(source):
+    if source is None:
+        return None
+    return list(source)
+
+
+def _to_event_hashset(events, event_source=None):
+    event_source = _normalize_source(event_source)
+    hashset = HashSet[AbstractEvent]()
+    for event in events:
+        if event_source is None:
+            if isinstance(event, AbstractEvent):
+                hashset.Add(event)
+            else:
+                raise TypeError(
+                    "Events must be UltraDES events when no automaton context is provided."
+                )
+        else:
+            hashset.Add(_as_event(event, event_source))
+    return hashset
+
+
+def _to_state_list(states, state_source=None):
+    state_source = _normalize_source(state_source)
+    state_list = List[State]()
+    for state in states:
+        if state_source is None:
+            if isinstance(state, State):
+                state_list.Add(state)
+            else:
+                raise TypeError(
+                    "States must be UltraDES states when no automaton context is provided."
+                )
+        else:
+            state_list.Add(_as_state(state, state_source))
+    return state_list
+
+
+def _to_state_tuple_list(pairs, state_source=None):
+    state_source = _normalize_source(state_source)
+    tuple_type = ValueTuple[State, State]
+    tuple_list = List[ValueTuple[State, State]]()
+    for origin, destination in pairs:
+        if state_source is None:
+            if isinstance(origin, State) and isinstance(destination, State):
+                resolved_origin = origin
+                resolved_destination = destination
+            else:
+                raise TypeError(
+                    "State pairs must contain UltraDES states when no automaton context is provided."
+                )
+        else:
+            resolved_origin = _as_state(origin, state_source)
+            resolved_destination = _as_state(destination, state_source)
+        tuple_list.Add(tuple_type(resolved_origin, resolved_destination))
+    return tuple_list
+
 
 def load_viz_js():
     script = """
@@ -248,12 +364,95 @@ def show_automaton(G):
 
 # Observer Algorithms
 def observer_property_verify(G, events):
-    list_opv = ObserverAlgorithms.ObserverPropertyVerify(G, events)
-    return_on_dead = list_opv[0]
+    list_opv = ObserverAlgorithms.ObserverPropertyVerify(
+        G, _to_event_hashset(events, G.Events)
+    )
+    return_on_dead = bool(list_opv[0])
     determinized_G = list_opv[1].Determinize
-    
+
     return (return_on_dead, determinized_G)
 
 def observer_property_search(G, events):
-    return ObserverAlgorithms.ObserverPropertySearch(G, events).Determinize
+    return ObserverAlgorithms.ObserverPropertySearch(
+        G, _to_event_hashset(events, G.Events)
+    ).Determinize
+
+
+# Diagnostics
+def create_observer(G, unobservable_events):
+    """Construct the observer automaton for ``G``.
+
+    ``unobservable_events`` may contain :class:`Event` instances or event names.
+    """
+
+    return DiagnosticsAlgoritms.CreateObserver(
+        G, _to_event_hashset(unobservable_events, G.Events)
+    )
+
+
+def is_diagnosable(observer):
+    """Check whether the system represented by ``observer`` is diagnosable."""
+
+    return bool(DiagnosticsAlgoritms.IsDiagnosable(observer))
+
+
+# Opacity algorithms
+def initial_state_opacity(G, unobservable_events, secret_states):
+    """Evaluate initial-state opacity for ``G``.
+
+    Both ``unobservable_events`` and ``secret_states`` accept UltraDES objects or
+    their corresponding names. Returns ``(is_opaque, estimator)`` mirroring the
+    C# API.
+    """
+
+    result, estimator = OpacityAlgorithms.InitialStateOpacity(
+        G,
+        _to_event_hashset(unobservable_events, G.Events),
+        _to_state_list(secret_states, G.States),
+    )
+    return bool(result), estimator
+
+
+def current_step_opacity(G, unobservable_events, secret_states):
+    """Evaluate current-step opacity for ``G``.
+
+    Parameters follow the same conventions as :func:`initial_state_opacity`.
+    """
+
+    result, estimator = OpacityAlgorithms.CurrentStepOpacity(
+        G,
+        _to_event_hashset(unobservable_events, G.Events),
+        _to_state_list(secret_states, G.States),
+    )
+    return bool(result), estimator
+
+
+def initial_final_state_opacity(G, unobservable_events, secret_state_pairs):
+    """Evaluate infinite-step opacity for ``G``.
+
+    ``secret_state_pairs`` may contain ``(State, State)`` tuples or state name
+    pairs.
+    """
+
+    result, estimator = OpacityAlgorithms.InitialFinalStateOpacity(
+        G,
+        _to_event_hashset(unobservable_events, G.Events),
+        _to_state_tuple_list(secret_state_pairs, G.States),
+    )
+    return bool(result), estimator
+
+
+def k_steps_opacity(G, unobservable_events, secret_states, k):
+    """Evaluate ``k``-steps opacity for ``G``.
+
+    Parameters follow the same conventions as :func:`initial_state_opacity`.
+    """
+
+    result, estimator = OpacityAlgorithms.KStepsOpacity(
+        G,
+        _to_event_hashset(unobservable_events, G.Events),
+        _to_state_list(secret_states, G.States),
+        k,
+    )
+    return bool(result), estimator
 
