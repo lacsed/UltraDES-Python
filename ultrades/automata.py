@@ -308,7 +308,10 @@ def dfa(transitions, initial, name):
     """Create a Deterministic Finite Automaton.
     
     Args:
-        transitions: List of transitions (PythonTransition or C# Transition)
+        transitions: List of transitions. Can be:
+                     - PythonTransition objects
+                     - Tuples (origin, event, destination)
+                     - C# Transition objects
         initial: Initial state (PythonState or C# State)
         name: Automaton name (string)
     
@@ -322,8 +325,17 @@ def dfa(transitions, initial, name):
     trans = List[Transition]()
     for t in transitions:
         if isinstance(t, PythonTransition):
+            # Convert PythonTransition to C# Transition
             trans.Add(t._to_csharp())
+        elif isinstance(t, tuple) and len(t) == 3:
+            # Handle tuple format (origin, event, destination) - backward compatible
+            origin, event_obj, destination = t
+            origin_csharp = _convert_state_to_csharp(origin)
+            event_csharp = _convert_event_to_csharp(event_obj)
+            destination_csharp = _convert_state_to_csharp(destination)
+            trans.Add(Transition(origin_csharp, event_csharp, destination_csharp))
         else:
+            # Assume it's a C# Transition
             trans.Add(t)
     
     return DeterministicFiniteAutomaton(trans, initial_csharp, name)
