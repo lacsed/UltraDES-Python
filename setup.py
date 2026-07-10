@@ -144,7 +144,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="ultrades-python",
-    version="0.0.6",
+    version="0.0.7",
     author="LACSED Developers",
     author_email="lacsed.ufmg@gmail.com",
     description="A library for analysis and control of Discrete Event Systems",
