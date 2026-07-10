@@ -1,5 +1,6 @@
 import clr
-clr.AddReference("UltraDES")
+from ultrades import add_ultrades_reference
+add_ultrades_reference()
 clr.AddReference("System.Linq")
 clr.AddReference('System.Collections')
 
