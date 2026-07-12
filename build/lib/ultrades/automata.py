@@ -4,7 +4,7 @@ add_ultrades_reference()
 clr.AddReference("System.Linq")
 clr.AddReference('System.Collections')
 
-from System import ValueTuple
+from System import Array, ValueTuple
 from System.Collections.Generic import HashSet, List
 
 from UltraDES import (
@@ -20,7 +20,7 @@ from UltraDES import (
 from UltraDES.Diagnosability import DiagnosticsAlgoritms
 from UltraDES.Opacity import OpacityAlgorithms
 
-from IPython.core.display import HTML, Javascript, display
+from IPython.display import HTML, Javascript, display
 from IPython.core.getipython import get_ipython
 import time
 import hashlib
@@ -29,6 +29,9 @@ import hashlib
 # === Python/.NET interop helpers ===
 def _as_event(event_like, event_source):
     """Return the C# ``Event`` instance for ``event_like``."""
+
+    if isinstance(event_like, PythonEvent):
+        return event_like._to_csharp()
 
     if isinstance(event_like, AbstractEvent):
         return event_like
@@ -39,7 +42,7 @@ def _as_event(event_like, event_source):
                 "Event names can only be resolved when an automaton is provided."
             )
         for candidate in event_source:
-            name = getattr(candidate, "Name", None)
+            name = _object_name(candidate)
             if name == event_like or str(candidate) == event_like:
                 return candidate
         raise ValueError(f"Unknown event '{event_like}'")
@@ -52,6 +55,9 @@ def _as_event(event_like, event_source):
 def _as_state(state_like, state_source):
     """Return the C# ``State`` instance for ``state_like``."""
 
+    if isinstance(state_like, PythonState):
+        return state_like._to_csharp()
+
     if isinstance(state_like, State):
         return state_like
 
@@ -61,7 +67,7 @@ def _as_state(state_like, state_source):
                 "State names can only be resolved when an automaton is provided."
             )
         for candidate in state_source:
-            name = getattr(candidate, "Name", None)
+            name = _object_name(candidate)
             if name == state_like or str(candidate) == state_like:
                 return candidate
         raise ValueError(f"Unknown state '{state_like}'")
@@ -77,12 +83,48 @@ def _normalize_source(source):
     return list(source)
 
 
+def _object_name(obj):
+    """Return the display name used by the bundled UltraDES assembly.
+
+    Different UltraDES.dll builds expose the textual identifier as ``Name``,
+    ``Alias`` or ``S``.  The Python facade normalizes those variants so wrappers
+    work with both old and newer C# packages.
+    """
+
+    for attribute in ("Name", "Alias", "S"):
+        if hasattr(obj, attribute):
+            return str(getattr(obj, attribute))
+    return str(obj)
+
+
+def _is_marked_state(state_obj):
+    if hasattr(state_obj, "IsMarked"):
+        return bool(state_obj.IsMarked)
+    return state_obj.Marking == Marking.Marked
+
+
+def _is_controllable_event(event_obj):
+    if hasattr(event_obj, "IsControllable"):
+        return bool(event_obj.IsControllable)
+    return event_obj.Controllability == Controllability.Controllable
+
+
+def _as_iterable(value):
+    if value is None:
+        return []
+    if isinstance(value, (PythonEvent, AbstractEvent, str)):
+        return [value]
+    return value
+
+
 def _to_event_hashset(events, event_source=None):
     event_source = _normalize_source(event_source)
     hashset = HashSet[AbstractEvent]()
     for event in events:
         if event_source is None:
-            if isinstance(event, AbstractEvent):
+            if isinstance(event, PythonEvent):
+                hashset.Add(event._to_csharp())
+            elif isinstance(event, AbstractEvent):
                 hashset.Add(event)
             else:
                 raise TypeError(
@@ -93,12 +135,27 @@ def _to_event_hashset(events, event_source=None):
     return hashset
 
 
+def _to_event_array(events, event_source=None):
+    event_source = _normalize_source(event_source)
+    resolved_events = []
+    for evt in _as_iterable(events):
+        if isinstance(evt, PythonEvent):
+            resolved_events.append(evt._to_csharp())
+        elif event_source is None:
+            resolved_events.append(_convert_event_to_csharp(evt))
+        else:
+            resolved_events.append(_as_event(evt, event_source))
+    return Array[AbstractEvent](resolved_events)
+
+
 def _to_state_list(states, state_source=None):
     state_source = _normalize_source(state_source)
     state_list = List[State]()
     for state in states:
         if state_source is None:
-            if isinstance(state, State):
+            if isinstance(state, PythonState):
+                state_list.Add(state._to_csharp())
+            elif isinstance(state, State):
                 state_list.Add(state)
             else:
                 raise TypeError(
@@ -115,9 +172,11 @@ def _to_state_tuple_list(pairs, state_source=None):
     tuple_list = List[ValueTuple[State, State]]()
     for origin, destination in pairs:
         if state_source is None:
-            if isinstance(origin, State) and isinstance(destination, State):
-                resolved_origin = origin
-                resolved_destination = destination
+            if isinstance(origin, (PythonState, State)) and isinstance(
+                destination, (PythonState, State)
+            ):
+                resolved_origin = _convert_state_to_csharp(origin)
+                resolved_destination = _convert_state_to_csharp(destination)
             else:
                 raise TypeError(
                     "State pairs must contain UltraDES states when no automaton context is provided."
@@ -136,179 +195,224 @@ def load_viz_js():
         document.head.appendChild(script);
     """
     display(Javascript(script))
-    
-load_viz_js()
 
 
-# === Python wrapper types with transparent C# conversion ===
+# === Python facade types with transparent C# conversion ===
 class PythonEvent:
-    """Python wrapper for UltraDES Event with transparent C# conversion."""
-    
+    """Python facade for an UltraDES C# ``Event``.
+
+    The facade keeps the original C# object internally, exposes Python-friendly
+    attributes and renders the event by name when printed.
+    """
+
     def __init__(self, name, controllable=True):
-        """Create a Python Event.
-        
-        Args:
-            name: Event name (string)
-            controllable: Boolean indicating if event is controllable (default: True)
-        """
-        self.name = name
-        self.controllable = controllable
-        self._csharp_event = None
-    
-    def _to_csharp(self):
-        """Convert to C# Event (cached)."""
-        if self._csharp_event is None:
+        if isinstance(name, PythonEvent):
+            self._csharp_event = name._to_csharp()
+        elif isinstance(name, AbstractEvent):
+            self._csharp_event = name
+        else:
             self._csharp_event = Event(
-                self.name,
-                Controllability.Controllable if self.controllable else Controllability.Uncontrollable
+                str(name),
+                Controllability.Controllable
+                if controllable
+                else Controllability.Uncontrollable,
             )
+
+    @property
+    def name(self):
+        return _object_name(self._csharp_event)
+
+    @property
+    def controllable(self):
+        return _is_controllable_event(self._csharp_event)
+
+    def _to_csharp(self):
         return self._csharp_event
-    
+
+    def __getattr__(self, name):
+        return getattr(self._csharp_event, name)
+
     def __repr__(self):
         ctrl = "controllable" if self.controllable else "uncontrollable"
         return f"Event('{self.name}', {ctrl})"
-    
+
     def __str__(self):
         return self.name
+
+    def __eq__(self, other):
+        return self._to_csharp().Equals(_convert_event_to_csharp(other))
+
+    def __hash__(self):
+        return self._to_csharp().GetHashCode()
 
 
 class PythonState:
-    """Python wrapper for UltraDES State with transparent C# conversion."""
-    
+    """Python facade for an UltraDES C# ``State``."""
+
     def __init__(self, name, marked=False):
-        """Create a Python State.
-        
-        Args:
-            name: State name (string)
-            marked: Boolean indicating if state is marked (default: False)
-        """
-        self.name = name
-        self.marked = marked
-        self._csharp_state = None
-    
-    def _to_csharp(self):
-        """Convert to C# State (cached)."""
-        if self._csharp_state is None:
+        if isinstance(name, PythonState):
+            self._csharp_state = name._to_csharp()
+        elif isinstance(name, State):
+            self._csharp_state = name
+        else:
             self._csharp_state = State(
-                self.name,
-                Marking.Marked if self.marked else Marking.Unmarked
+                str(name), Marking.Marked if marked else Marking.Unmarked
             )
+
+    @property
+    def name(self):
+        return _object_name(self._csharp_state)
+
+    @property
+    def marked(self):
+        return _is_marked_state(self._csharp_state)
+
+    def _to_csharp(self):
         return self._csharp_state
-    
+
+    def __getattr__(self, name):
+        return getattr(self._csharp_state, name)
+
     def __repr__(self):
         mark = "marked" if self.marked else "unmarked"
         return f"State('{self.name}', {mark})"
-    
+
     def __str__(self):
         return self.name
 
+    def __eq__(self, other):
+        return self._to_csharp().Equals(_convert_state_to_csharp(other))
+
+    def __hash__(self):
+        return self._to_csharp().GetHashCode()
+
 
 class PythonTransition:
-    """Python wrapper for UltraDES Transition with transparent C# conversion."""
-    
-    def __init__(self, origin, trigger, destination):
-        """Create a Python Transition.
-        
-        Args:
-            origin: Origin state (PythonState or State)
-            trigger: Triggering event (PythonEvent or Event)
-            destination: Destination state (PythonState or State)
-        """
-        self.origin = origin
-        self.trigger = trigger
-        self.destination = destination
-    
+    """Python facade for an UltraDES C# ``Transition``."""
+
+    def __init__(self, origin, trigger=None, destination=None):
+        if trigger is None and destination is None:
+            if isinstance(origin, PythonTransition):
+                self._csharp_transition = origin._to_csharp()
+            elif isinstance(origin, Transition):
+                self._csharp_transition = origin
+            else:
+                raise TypeError(
+                    "A transition facade needs either a Transition or "
+                    "(origin, trigger, destination)."
+                )
+        else:
+            self._csharp_transition = Transition(
+                _convert_state_to_csharp(origin),
+                _convert_event_to_csharp(trigger),
+                _convert_state_to_csharp(destination),
+            )
+
+    @property
+    def origin(self):
+        return PythonState(self._csharp_transition.Origin)
+
+    @property
+    def trigger(self):
+        return PythonEvent(self._csharp_transition.Trigger)
+
+    @property
+    def destination(self):
+        return PythonState(self._csharp_transition.Destination)
+
     def _to_csharp(self):
-        """Convert to C# Transition."""
-        origin = self.origin._to_csharp() if isinstance(self.origin, PythonState) else self.origin
-        trigger = self.trigger._to_csharp() if isinstance(self.trigger, PythonEvent) else self.trigger
-        destination = self.destination._to_csharp() if isinstance(self.destination, PythonState) else self.destination
-        return Transition(origin, trigger, destination)
-    
+        return self._csharp_transition
+
+    def __getattr__(self, name):
+        return getattr(self._csharp_transition, name)
+
     def __repr__(self):
-        return f"PythonTransition({self.origin} --{self.trigger}--> {self.destination})"
+        return f"Transition({self.origin} --{self.trigger}--> {self.destination})"
+
+    def __str__(self):
+        return f"{self.origin} --{self.trigger}--> {self.destination}"
+
+    def __iter__(self):
+        return iter((self.origin, self.trigger, self.destination))
+
+    def __len__(self):
+        return 3
+
+    def __getitem__(self, index):
+        return (self.origin, self.trigger, self.destination)[index]
+
+    def __eq__(self, other):
+        return self._to_csharp().Equals(_convert_transition_to_csharp(other))
+
+    def __hash__(self):
+        return self._to_csharp().GetHashCode()
 
 
 def _convert_event_to_csharp(event_obj):
-    """Convert Event to C# Event if needed."""
+    """Convert a Python/C# event facade to the underlying C# Event."""
     if isinstance(event_obj, PythonEvent):
         return event_obj._to_csharp()
     return event_obj
 
 
 def _convert_state_to_csharp(state_obj):
-    """Convert State to C# State if needed."""
+    """Convert a Python/C# state facade to the underlying C# State."""
     if isinstance(state_obj, PythonState):
         return state_obj._to_csharp()
     return state_obj
 
 
 def _convert_transition_to_csharp(transition_obj):
-    """Convert Transition to C# Transition if needed."""
+    """Convert a Python/C# transition facade to the underlying C# Transition."""
     if isinstance(transition_obj, PythonTransition):
         return transition_obj._to_csharp()
     return transition_obj
 
 
+def _wrap_event(event_obj):
+    return event_obj if isinstance(event_obj, PythonEvent) else PythonEvent(event_obj)
+
+
+def _wrap_state(state_obj):
+    return state_obj if isinstance(state_obj, PythonState) else PythonState(state_obj)
+
+
+def _wrap_transition(transition_obj):
+    return (
+        transition_obj
+        if isinstance(transition_obj, PythonTransition)
+        else PythonTransition(transition_obj)
+    )
+
+
 def state(name, marked=False):
-    """Create a Python State (new easy-to-use type).
-    
-    Args:
-        name: State name (string)
-        marked: Boolean indicating if state is marked (default: False)
-    
-    Returns:
-        PythonState: A Python wrapper state that converts transparently to C#
-    """
+    """Create or wrap a Python state facade."""
     return PythonState(name, marked)
 
 
 def is_marked(q):
-    """Check if a state is marked.
-    
-    Args:
-        q: State (PythonState or C# State)
-    
-    Returns:
-        Boolean: True if marked, False otherwise
-    """
-    if isinstance(q, PythonState):
-        return q.marked
-    return q.Marking == Marking.Marked
+    """Check if a Python or C# state is marked."""
+    return _is_marked_state(_convert_state_to_csharp(q))
 
 
 def event(name, controllable=True):
-    """Create a Python Event (new easy-to-use type).
-    
-    Args:
-        name: Event name (string)
-        controllable: Boolean indicating if event is controllable (default: True)
-    
-    Returns:
-        PythonEvent: A Python wrapper event that converts transparently to C#
-    """
+    """Create or wrap a Python event facade."""
     return PythonEvent(name, controllable)
 
 
 def is_controllable(e):
-    """Check if an event is controllable.
-    
-    Args:
-        e: Event (PythonEvent or C# Event)
-    
-    Returns:
-        Boolean: True if controllable, False otherwise
-    """
-    if isinstance(e, PythonEvent):
-        return e.controllable
-    return e.Controllability == Controllability.Controllable
+    """Check if a Python or C# event is controllable."""
+    return _is_controllable_event(_convert_event_to_csharp(e))
 
 # Automaton
 def dfa(transitions, initial, name):
     """Create a Deterministic Finite Automaton.
     
     Args:
-        transitions: List of transitions (PythonTransition or C# Transition)
+        transitions: List of transitions. Can be:
+                     - PythonTransition objects
+                     - Tuples (origin, event, destination)
+                     - C# Transition objects
         initial: Initial state (PythonState or C# State)
         name: Automaton name (string)
     
@@ -322,27 +426,35 @@ def dfa(transitions, initial, name):
     trans = List[Transition]()
     for t in transitions:
         if isinstance(t, PythonTransition):
+            # Convert PythonTransition to C# Transition
             trans.Add(t._to_csharp())
+        elif isinstance(t, tuple) and len(t) == 3:
+            # Handle tuple format (origin, event, destination) - backward compatible
+            origin, event_obj, destination = t
+            origin_csharp = _convert_state_to_csharp(origin)
+            event_csharp = _convert_event_to_csharp(event_obj)
+            destination_csharp = _convert_state_to_csharp(destination)
+            trans.Add(Transition(origin_csharp, event_csharp, destination_csharp))
         else:
-            trans.Add(t)
+            # Assume it's a C# Transition
+            trans.Add(_convert_transition_to_csharp(t))
     
     return DeterministicFiniteAutomaton(trans, initial_csharp, name)
 
 def initial_state(G):
-    return G.InitialState
+    return _wrap_state(G.InitialState)
 
 def events(G):
-    return list(G.Events)
+    return [_wrap_event(e) for e in G.Events]
 
 def states(G):
-    return list(G.States)
+    return [_wrap_state(q) for q in G.States]
 
 def marked_states(G):
-    return list(G.MarkedStates)
+    return [_wrap_state(q) for q in G.MarkedStates]
 
 def transitions(G):
-    trans = G.Transitions
-    return list(map(lambda t: (t.Origin, t.Trigger, t.Destination), trans))
+    return [_wrap_transition(t) for t in G.Transitions]
 
 def simplify_states_name(G):
     return G.SimplifyStatesName()
@@ -431,7 +543,7 @@ def projection(G, remove):
     # Convert PythonEvent to C# Event if needed
     remove_converted = HashSet[AbstractEvent]()
     if remove:
-        for evt in remove:
+        for evt in _as_iterable(remove):
             csharp_evt = _convert_event_to_csharp(evt)
             remove_converted.Add(csharp_evt)
     
@@ -451,7 +563,7 @@ def inverse_projection(G, events):
     # Convert PythonEvent to C# Event if needed
     events_converted = HashSet[AbstractEvent]()
     if events:
-        for evt in events:
+        for evt in _as_iterable(events):
             csharp_evt = _convert_event_to_csharp(evt)
             events_converted.Add(csharp_evt)
     
@@ -586,7 +698,8 @@ def write_fm(G, path):
     G.ToFM(path)
 
 def show_automaton(G):
-    shell_type = get_ipython().__class__.__name__
+    ipython = get_ipython()
+    shell_type = ipython.__class__.__name__ if ipython is not None else None
     
     if shell_type == 'Shell':
         timestamp = str(time.time())
@@ -594,11 +707,20 @@ def show_automaton(G):
         div_id = "out_" + hash_obj.hexdigest()
 
         htmlContent = f'''
-        <script src="https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js"></script>
         <div id="{div_id}"></div>
         <script>
             let targetDiv = document.querySelector("#{div_id}");
-            targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+            const renderAutomaton = () => {{
+                targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+            }};
+            if (typeof Viz === "undefined") {{
+                const script = document.createElement("script");
+                script.src = "https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js";
+                script.onload = renderAutomaton;
+                document.head.appendChild(script);
+            }} else {{
+                renderAutomaton();
+            }}
         </script>
         '''
 
@@ -612,7 +734,17 @@ def show_automaton(G):
 
         code = f'''
         let targetDiv = document.querySelector("#{div_id}");
-        targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg')'''
+        const renderAutomaton = () => {{
+            targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+        }};
+        if (typeof Viz === "undefined") {{
+            const script = document.createElement("script");
+            script.src = "https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js";
+            script.onload = renderAutomaton;
+            document.head.appendChild(script);
+        }} else {{
+            renderAutomaton();
+        }}'''
 
         return Javascript(code)
 
@@ -627,15 +759,8 @@ def observer_property_verify(G, events):
     Returns:
         Tuple: (return_on_dead, determinized_observer)
     """
-    # Convert events
-    events_hashset = HashSet[AbstractEvent]()
-    for evt in events:
-        if isinstance(evt, PythonEvent):
-            events_hashset.Add(evt._to_csharp())
-        else:
-            events_hashset.Add(_as_event(evt, G.Events))
-    
-    list_opv = ObserverAlgorithms.ObserverPropertyVerify(G, events_hashset)
+    events_array = _to_event_array(events, G.Events)
+    list_opv = ObserverAlgorithms.ObserverPropertyVerify(G, events_array)
     return_on_dead = bool(list_opv[0])
     determinized_G = list_opv[1].Determinize
 
@@ -652,15 +777,8 @@ def observer_property_search(G, events):
     Returns:
         DeterministicFiniteAutomaton: The determinized observer
     """
-    # Convert events
-    events_hashset = HashSet[AbstractEvent]()
-    for evt in events:
-        if isinstance(evt, PythonEvent):
-            events_hashset.Add(evt._to_csharp())
-        else:
-            events_hashset.Add(_as_event(evt, G.Events))
-    
-    return ObserverAlgorithms.ObserverPropertySearch(G, events_hashset).Determinize
+    events_array = _to_event_array(events, G.Events)
+    return ObserverAlgorithms.ObserverPropertySearch(G, events_array).Determinize
 
 
 # Diagnostics
@@ -837,4 +955,3 @@ def k_steps_opacity(G, unobservable_events, secret_states, k):
         G, events_hashset, states_list, k
     )
     return bool(result), estimator
-
