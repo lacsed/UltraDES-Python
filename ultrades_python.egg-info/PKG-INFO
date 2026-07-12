@@ -5,8 +5,8 @@ Summary: A library for analysis and control of Discrete Event Systems
 Home-page: https://github.com/lacsed/ultrades
 Author: LACSED Developers
 Author-email: lacsed.ufmg@gmail.com
+License: MIT
 Classifier: Programming Language :: Python :: 3
-Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
@@ -20,6 +20,7 @@ Dynamic: classifier
 Dynamic: description
 Dynamic: description-content-type
 Dynamic: home-page
+Dynamic: license
 Dynamic: license-file
 Dynamic: requires-dist
 Dynamic: requires-python

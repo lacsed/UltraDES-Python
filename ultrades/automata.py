@@ -4,7 +4,7 @@ add_ultrades_reference()
 clr.AddReference("System.Linq")
 clr.AddReference('System.Collections')
 
-from System import ValueTuple
+from System import Array, ValueTuple
 from System.Collections.Generic import HashSet, List
 
 from UltraDES import (
@@ -20,7 +20,7 @@ from UltraDES import (
 from UltraDES.Diagnosability import DiagnosticsAlgoritms
 from UltraDES.Opacity import OpacityAlgorithms
 
-from IPython.core.display import HTML, Javascript, display
+from IPython.display import HTML, Javascript, display
 from IPython.core.getipython import get_ipython
 import time
 import hashlib
@@ -42,7 +42,7 @@ def _as_event(event_like, event_source):
                 "Event names can only be resolved when an automaton is provided."
             )
         for candidate in event_source:
-            name = getattr(candidate, "Name", None)
+            name = _object_name(candidate)
             if name == event_like or str(candidate) == event_like:
                 return candidate
         raise ValueError(f"Unknown event '{event_like}'")
@@ -67,7 +67,7 @@ def _as_state(state_like, state_source):
                 "State names can only be resolved when an automaton is provided."
             )
         for candidate in state_source:
-            name = getattr(candidate, "Name", None)
+            name = _object_name(candidate)
             if name == state_like or str(candidate) == state_like:
                 return candidate
         raise ValueError(f"Unknown state '{state_like}'")
@@ -81,6 +81,40 @@ def _normalize_source(source):
     if source is None:
         return None
     return list(source)
+
+
+def _object_name(obj):
+    """Return the display name used by the bundled UltraDES assembly.
+
+    Different UltraDES.dll builds expose the textual identifier as ``Name``,
+    ``Alias`` or ``S``.  The Python facade normalizes those variants so wrappers
+    work with both old and newer C# packages.
+    """
+
+    for attribute in ("Name", "Alias", "S"):
+        if hasattr(obj, attribute):
+            return str(getattr(obj, attribute))
+    return str(obj)
+
+
+def _is_marked_state(state_obj):
+    if hasattr(state_obj, "IsMarked"):
+        return bool(state_obj.IsMarked)
+    return state_obj.Marking == Marking.Marked
+
+
+def _is_controllable_event(event_obj):
+    if hasattr(event_obj, "IsControllable"):
+        return bool(event_obj.IsControllable)
+    return event_obj.Controllability == Controllability.Controllable
+
+
+def _as_iterable(value):
+    if value is None:
+        return []
+    if isinstance(value, (PythonEvent, AbstractEvent, str)):
+        return [value]
+    return value
 
 
 def _to_event_hashset(events, event_source=None):
@@ -99,6 +133,19 @@ def _to_event_hashset(events, event_source=None):
         else:
             hashset.Add(_as_event(event, event_source))
     return hashset
+
+
+def _to_event_array(events, event_source=None):
+    event_source = _normalize_source(event_source)
+    resolved_events = []
+    for evt in _as_iterable(events):
+        if isinstance(evt, PythonEvent):
+            resolved_events.append(evt._to_csharp())
+        elif event_source is None:
+            resolved_events.append(_convert_event_to_csharp(evt))
+        else:
+            resolved_events.append(_as_event(evt, event_source))
+    return Array[AbstractEvent](resolved_events)
 
 
 def _to_state_list(states, state_source=None):
@@ -148,8 +195,6 @@ def load_viz_js():
         document.head.appendChild(script);
     """
     display(Javascript(script))
-    
-load_viz_js()
 
 
 # === Python facade types with transparent C# conversion ===
@@ -175,11 +220,11 @@ class PythonEvent:
 
     @property
     def name(self):
-        return self._csharp_event.Name
+        return _object_name(self._csharp_event)
 
     @property
     def controllable(self):
-        return self._csharp_event.Controllability == Controllability.Controllable
+        return _is_controllable_event(self._csharp_event)
 
     def _to_csharp(self):
         return self._csharp_event
@@ -216,11 +261,11 @@ class PythonState:
 
     @property
     def name(self):
-        return self._csharp_state.Name
+        return _object_name(self._csharp_state)
 
     @property
     def marked(self):
-        return self._csharp_state.Marking == Marking.Marked
+        return _is_marked_state(self._csharp_state)
 
     def _to_csharp(self):
         return self._csharp_state
@@ -287,6 +332,15 @@ class PythonTransition:
     def __str__(self):
         return f"{self.origin} --{self.trigger}--> {self.destination}"
 
+    def __iter__(self):
+        return iter((self.origin, self.trigger, self.destination))
+
+    def __len__(self):
+        return 3
+
+    def __getitem__(self, index):
+        return (self.origin, self.trigger, self.destination)[index]
+
     def __eq__(self, other):
         return self._to_csharp().Equals(_convert_transition_to_csharp(other))
 
@@ -338,7 +392,7 @@ def state(name, marked=False):
 
 def is_marked(q):
     """Check if a Python or C# state is marked."""
-    return _convert_state_to_csharp(q).Marking == Marking.Marked
+    return _is_marked_state(_convert_state_to_csharp(q))
 
 
 def event(name, controllable=True):
@@ -348,7 +402,7 @@ def event(name, controllable=True):
 
 def is_controllable(e):
     """Check if a Python or C# event is controllable."""
-    return _convert_event_to_csharp(e).Controllability == Controllability.Controllable
+    return _is_controllable_event(_convert_event_to_csharp(e))
 
 # Automaton
 def dfa(transitions, initial, name):
@@ -489,7 +543,7 @@ def projection(G, remove):
     # Convert PythonEvent to C# Event if needed
     remove_converted = HashSet[AbstractEvent]()
     if remove:
-        for evt in remove:
+        for evt in _as_iterable(remove):
             csharp_evt = _convert_event_to_csharp(evt)
             remove_converted.Add(csharp_evt)
     
@@ -509,7 +563,7 @@ def inverse_projection(G, events):
     # Convert PythonEvent to C# Event if needed
     events_converted = HashSet[AbstractEvent]()
     if events:
-        for evt in events:
+        for evt in _as_iterable(events):
             csharp_evt = _convert_event_to_csharp(evt)
             events_converted.Add(csharp_evt)
     
@@ -644,7 +698,8 @@ def write_fm(G, path):
     G.ToFM(path)
 
 def show_automaton(G):
-    shell_type = get_ipython().__class__.__name__
+    ipython = get_ipython()
+    shell_type = ipython.__class__.__name__ if ipython is not None else None
     
     if shell_type == 'Shell':
         timestamp = str(time.time())
@@ -652,11 +707,20 @@ def show_automaton(G):
         div_id = "out_" + hash_obj.hexdigest()
 
         htmlContent = f'''
-        <script src="https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js"></script>
         <div id="{div_id}"></div>
         <script>
             let targetDiv = document.querySelector("#{div_id}");
-            targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+            const renderAutomaton = () => {{
+                targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+            }};
+            if (typeof Viz === "undefined") {{
+                const script = document.createElement("script");
+                script.src = "https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js";
+                script.onload = renderAutomaton;
+                document.head.appendChild(script);
+            }} else {{
+                renderAutomaton();
+            }}
         </script>
         '''
 
@@ -670,7 +734,17 @@ def show_automaton(G):
 
         code = f'''
         let targetDiv = document.querySelector("#{div_id}");
-        targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg')'''
+        const renderAutomaton = () => {{
+            targetDiv.innerHTML = Viz(`{G.ToDotCode.replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+        }};
+        if (typeof Viz === "undefined") {{
+            const script = document.createElement("script");
+            script.src = "https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js";
+            script.onload = renderAutomaton;
+            document.head.appendChild(script);
+        }} else {{
+            renderAutomaton();
+        }}'''
 
         return Javascript(code)
 
@@ -685,15 +759,8 @@ def observer_property_verify(G, events):
     Returns:
         Tuple: (return_on_dead, determinized_observer)
     """
-    # Convert events
-    events_hashset = HashSet[AbstractEvent]()
-    for evt in events:
-        if isinstance(evt, PythonEvent):
-            events_hashset.Add(evt._to_csharp())
-        else:
-            events_hashset.Add(_as_event(evt, G.Events))
-    
-    list_opv = ObserverAlgorithms.ObserverPropertyVerify(G, events_hashset)
+    events_array = _to_event_array(events, G.Events)
+    list_opv = ObserverAlgorithms.ObserverPropertyVerify(G, events_array)
     return_on_dead = bool(list_opv[0])
     determinized_G = list_opv[1].Determinize
 
@@ -710,15 +777,8 @@ def observer_property_search(G, events):
     Returns:
         DeterministicFiniteAutomaton: The determinized observer
     """
-    # Convert events
-    events_hashset = HashSet[AbstractEvent]()
-    for evt in events:
-        if isinstance(evt, PythonEvent):
-            events_hashset.Add(evt._to_csharp())
-        else:
-            events_hashset.Add(_as_event(evt, G.Events))
-    
-    return ObserverAlgorithms.ObserverPropertySearch(G, events_hashset).Determinize
+    events_array = _to_event_array(events, G.Events)
+    return ObserverAlgorithms.ObserverPropertySearch(G, events_array).Determinize
 
 
 # Diagnostics
@@ -895,4 +955,3 @@ def k_steps_opacity(G, unobservable_events, secret_states, k):
         G, events_hashset, states_list, k
     )
     return bool(result), estimator
-

@@ -5,7 +5,8 @@ Test file to validate Python types and new function signatures.
 from ultrades.automata import (
     state, event, PythonTransition, PythonEvent, PythonState,
     dfa, parallel_composition, product,
-    is_marked, is_controllable
+    is_marked, is_controllable,
+    initial_state, events, states, marked_states, projection
 )
 
 
@@ -88,6 +89,12 @@ def test_dfa_with_python_types():
     print(f"DFA created: {G}")
     print(f"Initial state: {G.InitialState}")
     print(f"Number of states: {len(list(G.States))}")
+    print(f"Wrapped initial state: {initial_state(G)}")
+    print(f"Wrapped states: {states(G)}")
+    print(f"Wrapped events: {events(G)}")
+    print(f"Wrapped marked states: {marked_states(G)}")
+    projected = projection(G, a)
+    print(f"Projection with a single Python event: {projected}")
 
 
 def test_parallel_composition_list():
