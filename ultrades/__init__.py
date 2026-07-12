@@ -29,19 +29,14 @@ def _add_package_dir_to_loader_path() -> None:
 def _load_pythonnet_runtime() -> None:
     """Ensure the pythonnet runtime is loaded.
 
-    ``ULTRADES_RUNTIME`` can force a pythonnet runtime (for example ``coreclr``
-    in Google Colab/Jupyter images or ``mono`` on older Unix installations).
-    Without an explicit preference we try the default import first, then Mono,
-    then CoreCLR so notebooks on Windows, macOS and Linux get a useful fallback.
+    ``ULTRADES_RUNTIME`` can force a pythonnet runtime (for example ``mono`` on
+    older Unix installations).  Without an explicit preference we try CoreCLR
+    first, then Mono, so notebooks on Windows, macOS and Linux get a useful
+    fallback without pythonnet defaulting to Mono on Linux.
     """
 
     _add_package_dir_to_loader_path()
-
-    try:
-        import clr  # type: ignore  # noqa: F401 - imported for its side effect
-        return
-    except ImportError:
-        pass
+    last_error: Optional[Exception] = None
 
     try:
         from pythonnet import load  # type: ignore
@@ -50,9 +45,8 @@ def _load_pythonnet_runtime() -> None:
 
     runtime_preference: Optional[str] = os.environ.get(_RUNTIME_ENV_VAR)
     runtime_candidates = [runtime_preference] if runtime_preference else []
-    runtime_candidates.extend(["mono", "coreclr"])
+    runtime_candidates.extend(["coreclr", "mono"])
 
-    last_error: Optional[Exception] = None
     for candidate in runtime_candidates:
         if not candidate:
             continue
@@ -61,6 +55,12 @@ def _load_pythonnet_runtime() -> None:
             break
         except Exception as exc:  # pragma: no cover - depends on environment
             last_error = exc
+            if "already" in str(exc).lower():
+                try:
+                    import clr  # type: ignore  # noqa: F401
+                    return
+                except Exception:
+                    pass
     else:
         raise RuntimeError(
             "Unable to load a pythonnet runtime. Set ULTRADES_RUNTIME=coreclr or "

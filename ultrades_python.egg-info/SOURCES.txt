@@ -1,6 +1,14 @@
 LICENSE
+MANIFEST.in
 README.md
+pyproject.toml
 setup.py
+tests/test_automata_basic.py
+tests/test_automata_io.py
+tests/test_display_helpers.py
+tests/test_packaging.py
+tests/test_petrinets_basic.py
+tests/test_runtime_loading.py
 ultrades/UltraDES.dll
 ultrades/__init__.py
 ultrades/automata.py

@@ -8,7 +8,7 @@ from System.Collections.Generic import List, KeyValuePair
 from System import ValueTuple, UInt32
 
 from UltraDES.PetriNets import PetriNet, Marking, Node, Place, Transition, Arc
-from IPython.core.display import HTML, Javascript, display
+from IPython.display import HTML, Javascript, display
 from IPython.core.getipython import get_ipython
 import time
 import hashlib
@@ -20,8 +20,6 @@ def load_viz_js():
         document.head.appendChild(script);
     """
     display(Javascript(script))
-
-load_viz_js()
 
 
 def place(name):
@@ -96,7 +94,8 @@ def incidence_matrix(P):
     return P.IncidenceMatrix();  
 
 def show_petri_net(P):
-    shell_type = get_ipython().__class__.__name__
+    ipython = get_ipython()
+    shell_type = ipython.__class__.__name__ if ipython is not None else None
     
     if shell_type == 'Shell':
         timestamp = str(time.time())
@@ -104,11 +103,20 @@ def show_petri_net(P):
         div_id = "out_" + hash_obj.hexdigest()
 
         htmlContent = f'''
-        <script src="https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js"></script>
         <div id="{div_id}"></div>
         <script>
             let targetDiv = document.querySelector("#{div_id}");
-            targetDiv.innerHTML = Viz(`{P.ToDotCode*().replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+            const renderPetriNet = () => {{
+                targetDiv.innerHTML = Viz(`{P.ToDotCode().replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+            }};
+            if (typeof Viz === "undefined") {{
+                const script = document.createElement("script");
+                script.src = "https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js";
+                script.onload = renderPetriNet;
+                document.head.appendChild(script);
+            }} else {{
+                renderPetriNet();
+            }}
         </script>
         '''
 
@@ -122,6 +130,16 @@ def show_petri_net(P):
 
         code = f'''
         let targetDiv = document.querySelector("#{div_id}");
-        targetDiv.innerHTML = Viz(`{P.ToDotCode().replace("rankdir=TB", "rankdir=LR")}`, 'svg')'''
+        const renderPetriNet = () => {{
+            targetDiv.innerHTML = Viz(`{P.ToDotCode().replace("rankdir=TB", "rankdir=LR")}`, 'svg');
+        }};
+        if (typeof Viz === "undefined") {{
+            const script = document.createElement("script");
+            script.src = "https://github.com/mdaines/viz.js/releases/download/v1.8.1-pre.5/viz.js";
+            script.onload = renderPetriNet;
+            document.head.appendChild(script);
+        }} else {{
+            renderPetriNet();
+        }}'''
 
         return Javascript(code)
