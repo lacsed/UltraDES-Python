@@ -94,3 +94,37 @@ Gp = parallel_composition(G1, G2);
  
 <a href="https://colab.research.google.com/drive/1g4vS4Yppzk8nzfzyO8Kna93LkOqxXYNc?usp=sharing"><img src="https://img.shields.io/static/v1?label=Go%20to&message=Colab%20NB&color=purple&style=for-the-badge"></a>
 <a href="https://colab.research.google.com/drive/1W3pWzNkyg1MMmAing3wZjBERyUJLpXN1?usp=sharing"><img src="https://img.shields.io/static/v1?label=Go%20to&message=Examples&color=pink&style=for-the-badge"></a>
+
+## Flexible Python inputs
+
+Existing function names, positional calls and return types remain supported.
+The wrapper also accepts these forms:
+
+```python
+from pathlib import Path
+from ultrades import automata as ua, petrinets as pn
+
+q0, q1 = ua.state('q0', marked=True), ua.state('q1')
+a = ua.event('a', controllable=False)
+G = ua.dfa([[q0, a, q1]], q0, 'G')  # tuples and Transition objects also work
+H = ua.projection(G, 'a')          # one event/name or an iterable
+C = ua.parallel_composition(g for g in [G, G])
+S = ua.monolithic_supervisor(G, G) # individual automata or iterables
+ua.write_xml(G, Path('G.xml'))
+
+p = pn.place('p')
+m = pn.marking({p: 2})            # also accepts (place, count) pairs
+```
+
+Event names are resolved against the supplied automaton. Unknown names raise
+`ValueError`; creating a new event for inverse projection requires an event object
+so that its controllability is explicit. Observer and opacity inputs also accept
+individual events and states where collections were previously required.
+`observer_property_verify` uses the relevant events; `create_observer` and opacity
+functions use the unobservable events. Their existing tuple returns are preserved;
+unpack the boolean explicitly instead of testing the tuple itself.
+
+Petri net arcs accept `Arc` objects or `(origin, destination, weight)` triples.
+Markings accept mappings or iterables of pairs. Counts retain support for numeric
+strings and must fit a nonnegative `UInt32`. Input errors identify the offending
+transition, arc or marking entry before passing it to .NET.

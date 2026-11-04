@@ -11,6 +11,7 @@ from UltraDES.PetriNets import PetriNet, Marking, Node, Place, Transition, Arc
 from IPython.display import HTML, Javascript, display
 from IPython.core.getipython import get_ipython
 import time
+from collections.abc import Mapping
 import hashlib
 
 def load_viz_js():
@@ -28,19 +29,47 @@ def place(name):
 def transition(name):
     return Transition(name)
 
-def marking(pairs):
-    marking_lst = List[KeyValuePair[Place, UInt32]]()
-    for m in pairs:
-        t = KeyValuePair[Place, UInt32](m[0], UInt32.Parse(str(m[1])))
-        marking_lst.Add(t)
+def _count(value, argument):
+    # Preserve Python/.NET integers and numeric strings accepted by UInt32.Parse.
+    try:
+        return UInt32.Parse(str(value))
+    except Exception as exc:
+        raise ValueError(f"{argument} must be a nonnegative UInt32 integer") from exc
 
-    return Marking(marking_lst)    
+
+def marking(pairs):
+    """Create a marking from (place, token count) pairs or a mapping.
+
+    Counts must be nonnegative integers representable by UInt32.
+    """
+    marking_lst = List[KeyValuePair[Place, UInt32]]()
+    items = pairs.items() if isinstance(pairs, Mapping) else pairs
+    for index, item in enumerate(items):
+        try:
+            place_obj, count = item
+        except (TypeError, ValueError) as exc:
+            raise TypeError(f"pairs[{index}] must be (place, token count)") from exc
+        if not isinstance(place_obj, Place):
+            raise TypeError(f"pairs[{index}] must refer to a Place")
+        marking_lst.Add(KeyValuePair[Place, UInt32](place_obj, _count(count, f"pairs[{index}] token count")))
+    return Marking(marking_lst)
+
 
 def petri_net(arcs, name):
+    """Create a net from Arc objects or (origin, destination, weight) triples."""
     arcs_lst = List[Arc]()
-    for a in arcs:
-        t = Arc(a[0], a[1], a[2])
-        arcs_lst.Add(t)
+    for index, item in enumerate(arcs):
+        if isinstance(item, Arc):
+            arcs_lst.Add(item)
+            continue
+        try:
+            origin, destination, weight = item
+        except (TypeError, ValueError) as exc:
+            raise TypeError(f"arcs[{index}] must be an Arc or (origin, destination, weight)") from exc
+        if not ((isinstance(origin, Place) and isinstance(destination, Transition)) or
+                (isinstance(origin, Transition) and isinstance(destination, Place))):
+            raise TypeError(f"arcs[{index}] must connect a Place and a Transition")
+        arcs_lst.Add(Arc(origin, destination, _count(weight, f"arcs[{index}] weight")))
     return PetriNet(arcs_lst, name)
 
 def places(P):
@@ -69,14 +98,14 @@ def fire_transition(P, marking, transitions):
 
 def is_siphon(P, places):
     places_lst = List[Place]()
-    for p in places:
+    for p in ([places] if isinstance(places, Place) else places):
         places_lst.Add(p)
 
     return P.IsSiphon(places_lst)
 
 def is_trap(P, places):
     places_lst = List[Place]()
-    for p in places:
+    for p in ([places] if isinstance(places, Place) else places):
         places_lst.Add(p)
 
     return P.IsTrap(places_lst)
