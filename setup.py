@@ -162,7 +162,8 @@ setuptools.setup(
         "pythonnet>=3.0.0",
         "ipython",
     ],
-    package_data={"ultrades": [ASSEMBLY_NAME]},
+    # The managed assembly is fetched on first use, not bundled into the wheel.
+    package_data={},
     include_package_data=True,
     cmdclass={"build_py": build_py},
     python_requires=">=3.8",

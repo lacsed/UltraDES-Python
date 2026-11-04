@@ -9,6 +9,7 @@ from System.Collections.Generic import HashSet, List
 
 from UltraDES import (
     AbstractEvent,
+    AbstractState,
     Controllability,
     DeterministicFiniteAutomaton,
     Event,
@@ -24,6 +25,8 @@ from IPython.display import HTML, Javascript, display
 from IPython.core.getipython import get_ipython
 import time
 import hashlib
+import os
+from collections.abc import Iterable
 
 
 # === Python/.NET interop helpers ===
@@ -58,7 +61,7 @@ def _as_state(state_like, state_source):
     if isinstance(state_like, PythonState):
         return state_like._to_csharp()
 
-    if isinstance(state_like, State):
+    if isinstance(state_like, AbstractState):
         return state_like
 
     if isinstance(state_like, str):
@@ -112,7 +115,7 @@ def _is_controllable_event(event_obj):
 def _as_iterable(value):
     if value is None:
         return []
-    if isinstance(value, (PythonEvent, AbstractEvent, str)):
+    if isinstance(value, (PythonEvent, AbstractEvent, PythonState, AbstractState, str)):
         return [value]
     return value
 
@@ -120,7 +123,7 @@ def _as_iterable(value):
 def _to_event_hashset(events, event_source=None):
     event_source = _normalize_source(event_source)
     hashset = HashSet[AbstractEvent]()
-    for event in events:
+    for event in _as_iterable(events):
         if event_source is None:
             if isinstance(event, PythonEvent):
                 hashset.Add(event._to_csharp())
@@ -151,7 +154,7 @@ def _to_event_array(events, event_source=None):
 def _to_state_list(states, state_source=None):
     state_source = _normalize_source(state_source)
     state_list = List[State]()
-    for state in states:
+    for state in _as_iterable(states):
         if state_source is None:
             if isinstance(state, PythonState):
                 state_list.Add(state._to_csharp())
@@ -252,7 +255,7 @@ class PythonState:
     def __init__(self, name, marked=False):
         if isinstance(name, PythonState):
             self._csharp_state = name._to_csharp()
-        elif isinstance(name, State):
+        elif isinstance(name, AbstractState):
             self._csharp_state = name
         else:
             self._csharp_state = State(
@@ -409,9 +412,9 @@ def dfa(transitions, initial, name):
     """Create a Deterministic Finite Automaton.
     
     Args:
-        transitions: List of transitions. Can be:
+        transitions: Iterable of transitions. Can contain:
                      - PythonTransition objects
-                     - Tuples (origin, event, destination)
+                     - Tuples or lists (origin, event, destination)
                      - C# Transition objects
         initial: Initial state (PythonState or C# State)
         name: Automaton name (string)
@@ -419,27 +422,27 @@ def dfa(transitions, initial, name):
     Returns:
         DeterministicFiniteAutomaton: The created automaton
     """
-    # Convert initial state if needed
     initial_csharp = _convert_state_to_csharp(initial)
-    
-    # Convert transitions
+    if not isinstance(initial_csharp, AbstractState):
+        raise TypeError("initial must be an UltraDES state")
     trans = List[Transition]()
-    for t in transitions:
-        if isinstance(t, PythonTransition):
-            # Convert PythonTransition to C# Transition
-            trans.Add(t._to_csharp())
-        elif isinstance(t, tuple) and len(t) == 3:
-            # Handle tuple format (origin, event, destination) - backward compatible
-            origin, event_obj, destination = t
-            origin_csharp = _convert_state_to_csharp(origin)
-            event_csharp = _convert_event_to_csharp(event_obj)
-            destination_csharp = _convert_state_to_csharp(destination)
-            trans.Add(Transition(origin_csharp, event_csharp, destination_csharp))
-        else:
-            # Assume it's a C# Transition
-            trans.Add(_convert_transition_to_csharp(t))
-    
+    for index, item in enumerate(transitions):
+        if isinstance(item, (PythonTransition, Transition)):
+            trans.Add(_convert_transition_to_csharp(item))
+            continue
+        if not isinstance(item, (tuple, list)) or len(item) != 3:
+            raise TypeError(f"transitions[{index}] must be a Transition or (origin, event, destination)")
+        origin, trigger, destination = item
+        origin = _convert_state_to_csharp(origin)
+        trigger = _convert_event_to_csharp(trigger)
+        destination = _convert_state_to_csharp(destination)
+        if not isinstance(origin, AbstractState) or not isinstance(destination, AbstractState):
+            raise TypeError(f"transitions[{index}] endpoints must be UltraDES states")
+        if not isinstance(trigger, AbstractEvent):
+            raise TypeError(f"transitions[{index}] event must be an UltraDES event")
+        trans.Add(Transition(origin, trigger, destination))
     return DeterministicFiniteAutomaton(trans, initial_csharp, name)
+
 
 def initial_state(G):
     return _wrap_state(G.InitialState)
@@ -468,7 +471,7 @@ def parallel_composition(G1, G2=None):
     
     Can be called in two ways:
     1. parallel_composition(G1, G2) - Two automata (backward compatible)
-    2. parallel_composition([G1, G2, ...]) - List of automata
+    2. parallel_composition(iterable) - Nonempty iterable of automata
     
     Args:
         G1: First automaton or list of automata
@@ -478,7 +481,8 @@ def parallel_composition(G1, G2=None):
         DeterministicFiniteAutomaton: The parallel composition
     """
     # Handle list input
-    if G2 is None and isinstance(G1, (list, tuple)):
+    if G2 is None and isinstance(G1, Iterable):
+        G1 = list(G1)
         if len(G1) == 0:
             raise ValueError("At least one automaton is required")
         if len(G1) == 1:
@@ -502,7 +506,7 @@ def product(G1, G2=None):
     
     Can be called in two ways:
     1. product(G1, G2) - Two automata (backward compatible)
-    2. product([G1, G2, ...]) - List of automata
+    2. product(iterable) - Nonempty iterable of automata
     
     Args:
         G1: First automaton or list of automata
@@ -512,7 +516,8 @@ def product(G1, G2=None):
         DeterministicFiniteAutomaton: The product
     """
     # Handle list input
-    if G2 is None and isinstance(G1, (list, tuple)):
+    if G2 is None and isinstance(G1, Iterable):
+        G1 = list(G1)
         if len(G1) == 0:
             raise ValueError("At least one automaton is required")
         if len(G1) == 1:
@@ -535,39 +540,23 @@ def projection(G, remove):
     
     Args:
         G: Automaton to project
-        remove: List of events to remove (PythonEvent or Event objects)
+        remove: Event, event name in G, or an iterable of either.
+                These events are removed from the alphabet.
     
     Returns:
         DeterministicFiniteAutomaton: The projected automaton
     """
-    # Convert PythonEvent to C# Event if needed
-    remove_converted = HashSet[AbstractEvent]()
-    if remove:
-        for evt in _as_iterable(remove):
-            csharp_evt = _convert_event_to_csharp(evt)
-            remove_converted.Add(csharp_evt)
-    
-    return G.Projection(remove_converted)
+    return G.Projection(_to_event_hashset(remove, G.Events))
 
 
 def inverse_projection(G, events):
-    """Compute the inverse projection of an automaton.
-    
-    Args:
-        G: Automaton to project
-        events: List of events to project (PythonEvent or Event objects)
-    
-    Returns:
-        DeterministicFiniteAutomaton: The inverse projected automaton
+    """Extend G's alphabet; accept events, names in G, or an iterable of them.
+
+    New events must be supplied as event objects because their controllability
+    cannot be inferred from a name.
     """
-    # Convert PythonEvent to C# Event if needed
-    events_converted = HashSet[AbstractEvent]()
-    if events:
-        for evt in _as_iterable(events):
-            csharp_evt = _convert_event_to_csharp(evt)
-            events_converted.Add(csharp_evt)
-    
-    return G.InverseProjection(events_converted)
+    return G.InverseProjection(_to_event_hashset(events, G.Events))
+
 
 def accessible(G):
     return G.AccessiblePart
@@ -587,115 +576,123 @@ def prefix_closure(G):
 def isomorphism(G1, G2):
     return DeterministicFiniteAutomaton.Isomorphism(G1, G2)
 
+def _automata(value, argument):
+    """Normalize a single automaton or an iterable without changing its order."""
+    items = [value] if isinstance(value, DeterministicFiniteAutomaton) else list(value)
+    if any(not isinstance(item, DeterministicFiniteAutomaton) for item in items):
+        raise TypeError(f"{argument} must contain UltraDES automata")
+    return items
+
+
 # Supervisory Controle
 def monolithic_supervisor(plants, specifications):
     plants_lst = List[DeterministicFiniteAutomaton]()
-    for p in plants:
+    for p in _automata(plants, "plants"):
         plants_lst.Add(p)
 
     specs_lst = List[DeterministicFiniteAutomaton]()
-    for e in specifications:
+    for e in _automata(specifications, "specifications"):
         specs_lst.Add(e)
 
     return DeterministicFiniteAutomaton.MonolithicSupervisor(plants_lst, specs_lst, True)
 
 def local_modular_supervisors(plants, specifications):
     plants_lst = List[DeterministicFiniteAutomaton]()
-    for p in plants:
+    for p in _automata(plants, "plants"):
         plants_lst.Add(p)
 
     specs_lst = List[DeterministicFiniteAutomaton]()
-    for e in specifications:
+    for e in _automata(specifications, "specifications"):
         specs_lst.Add(e)
 
     return list(DeterministicFiniteAutomaton.LocalModularSupervisor(plants_lst, specs_lst, None))
 
 def local_modular_reduced_supervisors(plants, specifications):
     plants_lst = List[DeterministicFiniteAutomaton]()
-    for p in plants:
+    for p in _automata(plants, "plants"):
         plants_lst.Add(p)
 
     specs_lst = List[DeterministicFiniteAutomaton]()
-    for e in specifications:
+    for e in _automata(specifications, "specifications"):
         specs_lst.Add(e)
      
     return list(DeterministicFiniteAutomaton.LocalModularReducedSupervisor(plants_lst, specs_lst))   
     
 def local_modular_localized_supervisors(plants, specifications):
     plants_lst = List[DeterministicFiniteAutomaton]()
-    for p in plants:
+    for p in _automata(plants, "plants"):
         plants_lst.Add(p)
 
     specs_lst = List[DeterministicFiniteAutomaton]()
-    for e in specifications:
+    for e in _automata(specifications, "specifications"):
         specs_lst.Add(e)
      
     return list(DeterministicFiniteAutomaton.LocalModularLocalizedSupervisor(plants_lst, specs_lst))     
 
 def localized_supervisors(plants, specifications):
     plants_lst = List[DeterministicFiniteAutomaton]()
-    for p in plants:
+    for p in _automata(plants, "plants"):
         plants_lst.Add(p)
 
     specs_lst = List[DeterministicFiniteAutomaton]()
-    for e in specifications:
+    for e in _automata(specifications, "specifications"):
         specs_lst.Add(e)
      
     return list(DeterministicFiniteAutomaton.MonolithicLocalizedSupervisor(plants_lst, specs_lst))
 
 def monolithic_reduced_supervisor(plants, specifications):
     plants_lst = List[DeterministicFiniteAutomaton]()
-    for p in plants:
+    for p in _automata(plants, "plants"):
         plants_lst.Add(p)
 
     specs_lst = List[DeterministicFiniteAutomaton]()
-    for e in specifications:
+    for e in _automata(specifications, "specifications"):
         specs_lst.Add(e)
 
     return DeterministicFiniteAutomaton.MonolithicReducedSupervisor(plants_lst, specs_lst)    
 
 # IO Operations
 def read_ads(path):
-    return DeterministicFiniteAutomaton.FromAdsFile(path)
+    return DeterministicFiniteAutomaton.FromAdsFile(os.fspath(path))
 
 def write_ads(G, path):
-    G.ToAdsFile(path)
+    G.ToAdsFile(os.fspath(path))
 
 def read_fsm(path):
-    return DeterministicFiniteAutomaton.FromFsmFile(path)
+    return DeterministicFiniteAutomaton.FromFsmFile(os.fspath(path))
 
 def write_fsm(G, path):
-    G.ToFsmFile(path)
+    G.ToFsmFile(os.fspath(path))
 
 def read_wmod(path):
-    plants, specs = DeterministicFiniteAutomaton.FromWmodFile(path, List[DeterministicFiniteAutomaton](), List[DeterministicFiniteAutomaton]())
+    plants, specs = DeterministicFiniteAutomaton.FromWmodFile(os.fspath(path), List[DeterministicFiniteAutomaton](), List[DeterministicFiniteAutomaton]())
     return (list(plants), list(specs))
 
 def write_wmod(plants, specs, path):
     plants_lst = List[DeterministicFiniteAutomaton]()
-    for p in plants:
+    for p in _automata(plants, "plants"):
         plants_lst.Add(p)
 
     specs_lst = List[DeterministicFiniteAutomaton]()
-    for e in specs:
+    for e in _automata(specs, "specs"):
         specs_lst.Add(e)
 
-    DeterministicFiniteAutomaton.ToWmodFile(path, plants_lst, specs_lst)
+    DeterministicFiniteAutomaton.ToWmodFile(os.fspath(path), plants_lst, specs_lst)
 
 def read_xml(path, names = True):
-    return DeterministicFiniteAutomaton.FromXMLFile(path, names)
+    return DeterministicFiniteAutomaton.FromXMLFile(os.fspath(path), names)
 
 def write_xml(G, path):
-    G.ToXMLFile(path)
+    G.ToXMLFile(os.fspath(path))
 
 def read_bin(path):
-    return DeterministicFiniteAutomaton.DeserializeAutomaton(path)
+    return DeterministicFiniteAutomaton.DeserializeAutomaton(os.fspath(path))
 
 def write_bin(G, path):
-    G.SerializeAutomaton(path)
+    G.SerializeAutomaton(os.fspath(path))
 
 def write_fm(G, path):
-    G.ToFM(path)
+    G.ToFM(os.fspath(path))
 
 def show_automaton(G):
     ipython = get_ipython()
@@ -797,7 +794,7 @@ def create_observer(G, unobservable_events):
     """
     # Convert PythonEvent and event names to C# Event
     events_hashset = HashSet[AbstractEvent]()
-    for evt in unobservable_events:
+    for evt in _as_iterable(unobservable_events):
         if isinstance(evt, PythonEvent):
             events_hashset.Add(evt._to_csharp())
         else:
@@ -830,7 +827,7 @@ def initial_state_opacity(G, unobservable_events, secret_states):
     """
     # Convert unobservable events
     events_hashset = HashSet[AbstractEvent]()
-    for evt in unobservable_events:
+    for evt in _as_iterable(unobservable_events):
         if isinstance(evt, PythonEvent):
             events_hashset.Add(evt._to_csharp())
         else:
@@ -838,7 +835,7 @@ def initial_state_opacity(G, unobservable_events, secret_states):
     
     # Convert secret states
     states_list = List[State]()
-    for st in secret_states:
+    for st in _as_iterable(secret_states):
         if isinstance(st, PythonState):
             states_list.Add(st._to_csharp())
         else:
@@ -865,7 +862,7 @@ def current_step_opacity(G, unobservable_events, secret_states):
     """
     # Convert unobservable events
     events_hashset = HashSet[AbstractEvent]()
-    for evt in unobservable_events:
+    for evt in _as_iterable(unobservable_events):
         if isinstance(evt, PythonEvent):
             events_hashset.Add(evt._to_csharp())
         else:
@@ -873,7 +870,7 @@ def current_step_opacity(G, unobservable_events, secret_states):
     
     # Convert secret states
     states_list = List[State]()
-    for st in secret_states:
+    for st in _as_iterable(secret_states):
         if isinstance(st, PythonState):
             states_list.Add(st._to_csharp())
         else:
@@ -901,7 +898,7 @@ def initial_final_state_opacity(G, unobservable_events, secret_state_pairs):
     """
     # Convert unobservable events
     events_hashset = HashSet[AbstractEvent]()
-    for evt in unobservable_events:
+    for evt in _as_iterable(unobservable_events):
         if isinstance(evt, PythonEvent):
             events_hashset.Add(evt._to_csharp())
         else:
@@ -937,7 +934,7 @@ def k_steps_opacity(G, unobservable_events, secret_states, k):
     """
     # Convert unobservable events
     events_hashset = HashSet[AbstractEvent]()
-    for evt in unobservable_events:
+    for evt in _as_iterable(unobservable_events):
         if isinstance(evt, PythonEvent):
             events_hashset.Add(evt._to_csharp())
         else:
@@ -945,7 +942,7 @@ def k_steps_opacity(G, unobservable_events, secret_states, k):
     
     # Convert secret states
     states_list = List[State]()
-    for st in secret_states:
+    for st in _as_iterable(secret_states):
         if isinstance(st, PythonState):
             states_list.Add(st._to_csharp())
         else:
